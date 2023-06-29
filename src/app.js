@@ -1,32 +1,79 @@
 import express from "express"
 import cors from "cors"
-import { MongoClient } from "mongodb";
+import { MongoClient } from "mongodb"
+import dotenv from "dotenv"
+import Joi from "joi"
+import dayjs from "dayjs"
 
 const app = express();
 app.use(cors())
 app.use(express.json())
+dotenv.config()
 
+const date = dayjs().format("hh:mm:ss")
 
 //conexão com o banco
-const mongoClient = new MongoClient("mongodb://localhost:27017/batepapouol")
+const mongoClient = new MongoClient(process.env.DATABASE_URL)
 let db
 
 mongoClient.connect()
     .then(() => db = mongoClient.db())
     .catch((err) => console.log(err.message))
 
+
 //funções
 app.post("/participants", (req, res) => {
     const { name } = req.body
-    
+
 
     //validações feita pela biblioteca joi
     //name deve ser string e ñ vazia - erro status 422
+
+    const participantSchema = Joi.object({
+        name: Joi.string().required()
+    })
+
+    const validation = participantSchema.validate({ name })
+    console.log(validation)
+
+    if (validation.error) {
+        return res.status(422).send(validation.error.details)
+    }
+
     //caso exista cadastro com nome ja usado, retornar status 409
+
+    // const nameExist = db.collection("participants").findOne({ name })
+    // console.log(nameExist)
+
+    // if (nameExist) {
+    //     return res.status(409).send("Esse nome já esta cadastrado!")
+    // }
+
     //salvar participante na coleçao de nome participants com mongoDB
+    db.collection("participants").insertOne({ name, lastStatus: Date.now() })
+        .then(() => {
+             db.collection("messages").insertOne(
+                { 
+                    from: name, 
+                    to: "Todos", 
+                    text: "entra na sala...", 
+                    type: "status",
+                    time: date
+                 })
+             res.status(201).send("Usuário criado")
+             return
+        })
+        .catch(err => {
+            return res.status(500).send(err.message)
+        })
+
+
+
     //salvar com mongoDB uma msg na collection messages
+
+
     //por fim , caso sucesso retornar status 201, 
-    res.status(201)
+
 })
 
 app.get("/participants", (req, res) => {
@@ -41,7 +88,7 @@ app.get("/participants", (req, res) => {
             return res.status(500).send(err.message)
         })
 
-    
+
 })
 
 app.post("/messages", (req, res) => {

@@ -36,14 +36,14 @@ app.post("/participants", async (req, res) => {
     console.log(validation)
 
     if (validation.error) return res.status(422).send(validation.error.details)
-    
+
     //caso exista cadastro com nome ja usado, retornar status 409
     //salvar participante na coleçao de nome participants com mongoDB
     //salvar com mongoDB uma msg na collection messages
     //por fim , caso sucesso retornar status 201, 
     try {
 
-        const nameExist = await db.collection("participants").findOne({name})
+        const nameExist = await db.collection("participants").findOne({ name })
 
         if (nameExist) return res.status(409).send("Usuário já cadastrado")
 
@@ -69,21 +69,18 @@ app.post("/participants", async (req, res) => {
 app.get("/participants", async (req, res) => {
     //retornar a lista de todos os participantes
     //caso n houver nenhum retornar []
-
     try {
         const participants = await db.collection("participants").find().toArray()
         res.send(participants)
     } catch (err) {
         res.status(500).send(err.message)
     }
-
 })
 
-app.post("/messages", (req, res) => {
+app.post("/messages", async (req, res) => {
     //receber do body os parametros to, text e type
     const { to, text, type } = req.body
 
-    console.log(text)
     //Já o from da mensagem, ou seja, o remetente, não será enviado pelo body. 
     //Será enviado pelo cliente através de um header na requisição chamado User. 
     const { user } = req.headers
@@ -93,6 +90,8 @@ app.post("/messages", (req, res) => {
     //   to e text devem ser strings não vazias.
     //   type só pode ser `message` ou `private_message`.
     //   from é obrigatório e deve ser um participante existente na lista de participantes (ou seja, que está na sala).
+    //por fim , caso sucesso retornar status 201, 
+   
 
     const messageSchema = Joi.object({
         from: Joi.string().required(),
@@ -101,11 +100,30 @@ app.post("/messages", (req, res) => {
         type: Joi.string().valid('message', 'private_message').required()
     })
 
-    const validation = messageSchema.validate({ to, text, type, from: user })
+    const validation = messageSchema.validate({ to, text, type, from: user }, { abortEarly: false })
     console.log(validation)
 
-    //por fim , caso sucesso retornar status 201, 
-    res.status(201)
+    if (validation.error) return res.status(422).send(validation.error.details)
+
+    try {
+
+        let nameExist = await db.collection("participants").findOne({ name: user })
+        console.log(nameExist)
+        if (!nameExist) return res.status(422).send("Usuário não esta na sala de participantes")
+
+        await db.collection("messages").insertOne({
+            from: user,
+            to,
+            text,
+            type,
+            time: date
+        })
+        res.status(201)
+
+
+    } catch (err) {
+        return res.status(500).send(console.log(err))
+    }
 
 })
 

@@ -22,9 +22,8 @@ mongoClient.connect()
 
 
 //funções
-app.post("/participants", (req, res) => {
+app.post("/participants", async (req, res) => {
     const { name } = req.body
-
 
     //validações feita pela biblioteca joi
     //name deve ser string e ñ vazia - erro status 422
@@ -36,71 +35,74 @@ app.post("/participants", (req, res) => {
     const validation = participantSchema.validate({ name })
     console.log(validation)
 
-    if (validation.error) {
-        return res.status(422).send(validation.error.details)
-    }
-
+    if (validation.error) return res.status(422).send(validation.error.details)
+    
     //caso exista cadastro com nome ja usado, retornar status 409
-
-    // const nameExist = db.collection("participants").findOne({ name })
-    // console.log(nameExist)
-
-    // if (nameExist) {
-    //     return res.status(409).send("Esse nome já esta cadastrado!")
-    // }
-
     //salvar participante na coleçao de nome participants com mongoDB
-    db.collection("participants").insertOne({ name, lastStatus: Date.now() })
-        .then(() => {
-             db.collection("messages").insertOne(
-                { 
-                    from: name, 
-                    to: "Todos", 
-                    text: "entra na sala...", 
-                    type: "status",
-                    time: date
-                 })
-             res.status(201).send("Usuário criado")
-             return
-        })
-        .catch(err => {
-            return res.status(500).send(err.message)
-        })
-
-
-
     //salvar com mongoDB uma msg na collection messages
-
-
     //por fim , caso sucesso retornar status 201, 
+    try {
+
+        const nameExist = await db.collection("participants").findOne({name})
+
+        if (nameExist) return res.status(409).send("Usuário já cadastrado")
+
+        await db.collection("participants").insertOne({ name, lastStatus: Date.now() })
+
+        await db.collection("messages").insertOne(
+            {
+                from: name,
+                to: "Todos",
+                text: "entra na sala...",
+                type: "status",
+                time: date
+            })
+
+        res.status(201).send("Usuário criado")
+
+    } catch (err) {
+        res.status(500).send(err.message)
+    }
 
 })
 
-app.get("/participants", (req, res) => {
+app.get("/participants", async (req, res) => {
     //retornar a lista de todos os participantes
     //caso n houver nenhum retornar []
 
-    db.collection("participants").find().toArray()
-        .then((participants) => {
-            return res.send(participants)
-        })
-        .catch(err => {
-            return res.status(500).send(err.message)
-        })
-
+    try {
+        const participants = await db.collection("participants").find().toArray()
+        res.send(participants)
+    } catch (err) {
+        res.status(500).send(err.message)
+    }
 
 })
 
 app.post("/messages", (req, res) => {
     //receber do body os parametros to, text e type
     const { to, text, type } = req.body
+
+    console.log(text)
     //Já o from da mensagem, ou seja, o remetente, não será enviado pelo body. 
     //Será enviado pelo cliente através de um header na requisição chamado User. 
+    const { user } = req.headers
+    console.log(user)
 
     //   Validar: (caso algum erro seja encontrado, retornar **status 422**).
     //   to e text devem ser strings não vazias.
     //   type só pode ser `message` ou `private_message`.
     //   from é obrigatório e deve ser um participante existente na lista de participantes (ou seja, que está na sala).
+
+    const messageSchema = Joi.object({
+        from: Joi.string().required(),
+        to: Joi.string().required(),
+        text: Joi.string().required(),
+        type: Joi.string().valid('message', 'private_message').required()
+    })
+
+    const validation = messageSchema.validate({ to, text, type, from: user })
+    console.log(validation)
 
     //por fim , caso sucesso retornar status 201, 
     res.status(201)
@@ -108,6 +110,21 @@ app.post("/messages", (req, res) => {
 })
 
 app.get("/messages", (req, res) => {
+
+    let { user } = req.headers
+    let limit
+
+    if (req.query.limit) {
+        limit = parseInt(req.query.limit);
+        if (limit < 1 || isNaN(limit)) {
+            res.status(422).send("Limite inválido")
+            return
+        }
+    }
+
+
+
+
     res.send("ok")
 })
 

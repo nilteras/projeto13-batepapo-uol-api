@@ -146,12 +146,31 @@ app.post("/status", async (req, res) => {
 
     //Atualizar o atributo lastStatus do participante informado para o timestamp atual, utilizando Date.now().
     await db.collection("participants").updateOne(
-        { name: user }, 
-        { $set: { name: user, lastStatus: Date.now() }}
-        )
+        { name: user },
+        { $set: { name: user, lastStatus: Date.now() } }
+    )
     //caso sucesso status 200
     res.status(200).send("Participante atualizado")
 })
+
+setInterval(async () => {
+    let participants = await db.collection("participants").find({ lastStatus: { $lte: Date.now() - 10000 } }).toArray()
+
+    participants.forEach(async p => {
+        await db.collection("participants").deleteOne({ name: p.name })
+
+        await db.collection("messages").insertOne(
+            {
+                from: p.name,
+                to: "Todos",
+                text: "sai na sala...",
+                type: "status",
+                time: date
+            })
+    })
+
+}, 15000)
+
 
 //Ligar a aplicação do servidor para ouvir requisições
 const PORT = 5000;

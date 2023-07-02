@@ -24,10 +24,6 @@ mongoClient.connect()
 //funções
 app.post("/participants", async (req, res) => {
     const { name } = req.body
-
-    //validações feita pela biblioteca joi
-    //name deve ser string e ñ vazia - erro status 422
-
     const participantSchema = Joi.object({
         name: Joi.string().required()
     })
@@ -37,10 +33,6 @@ app.post("/participants", async (req, res) => {
 
     if (validation.error) return res.status(422).send(validation.error.details)
 
-    //caso exista cadastro com nome ja usado, retornar status 409
-    //salvar participante na coleçao de nome participants com mongoDB
-    //salvar com mongoDB uma msg na collection messages
-    //por fim , caso sucesso retornar status 201, 
     try {
 
         const nameExist = await db.collection("participants").findOne({ name })
@@ -67,8 +59,7 @@ app.post("/participants", async (req, res) => {
 })
 
 app.get("/participants", async (req, res) => {
-    //retornar a lista de todos os participantes
-    //caso n houver nenhum retornar []
+
     try {
         const participants = await db.collection("participants").find().toArray()
         res.send(participants)
@@ -78,20 +69,9 @@ app.get("/participants", async (req, res) => {
 })
 
 app.post("/messages", async (req, res) => {
-    //receber do body os parametros to, text e type
     const { to, text, type } = req.body
-
-    //Já o from da mensagem, ou seja, o remetente, não será enviado pelo body. 
-    //Será enviado pelo cliente através de um header na requisição chamado User. 
     const { user } = req.headers
     console.log(user)
-
-    //   Validar: (caso algum erro seja encontrado, retornar **status 422**).
-    //   to e text devem ser strings não vazias.
-    //   type só pode ser `message` ou `private_message`.
-    //   from é obrigatório e deve ser um participante existente na lista de participantes (ou seja, que está na sala).
-    //por fim , caso sucesso retornar status 201, 
-   
 
     const messageSchema = Joi.object({
         from: Joi.string().required(),
@@ -99,11 +79,15 @@ app.post("/messages", async (req, res) => {
         text: Joi.string().required(),
         type: Joi.string().valid('message', 'private_message').required()
     })
-
     const validation = messageSchema.validate({ to, text, type, from: user }, { abortEarly: false })
     console.log(validation)
 
-    if (validation.error) return res.status(422).send(validation.error.details)
+    if (validation.error) {
+        const errors = validation.error.details.map((err) => {
+            return err.message
+        })
+        return res.status(422).send(errors)
+    }
 
     try {
 
@@ -118,7 +102,7 @@ app.post("/messages", async (req, res) => {
             type,
             time: date
         })
-        res.status(201)
+        res.status(201).send("Mensagem enviada")
 
 
     } catch (err) {
@@ -127,10 +111,11 @@ app.post("/messages", async (req, res) => {
 
 })
 
-app.get("/messages", (req, res) => {
+app.get("/messages", async (req, res) => {
 
     let { user } = req.headers
     let limit
+    const messages = await db.collection("messages").find().toArray()
 
     if (req.query.limit) {
         limit = parseInt(req.query.limit);
@@ -139,11 +124,14 @@ app.get("/messages", (req, res) => {
             return
         }
     }
-
-
-
-
-    res.send("ok")
+    let visibleMessages = messages.filter((m) => 
+        m.user === user ||
+        m.type === 'message' ||
+        m.to === user && m.type === 'private_message' ||
+        m.from === user && m.type === 'private_message' ||
+        m.type === 'status'
+    )
+    res.send(visibleMessages.splice(-limit))
 })
 
 app.post("/status", (req, res) => {

@@ -124,7 +124,7 @@ app.get("/messages", async (req, res) => {
             return
         }
     }
-    let visibleMessages = messages.filter((m) => 
+    let visibleMessages = messages.filter((m) =>
         m.user === user ||
         m.type === 'message' ||
         m.to === user && m.type === 'private_message' ||
@@ -134,17 +134,23 @@ app.get("/messages", async (req, res) => {
     res.send(visibleMessages.splice(-limit))
 })
 
-app.post("/status", (req, res) => {
+app.post("/status", async (req, res) => {
     //Deve receber por um header na requisição, chamado User, contendo o nome do participante a ser atualizado.
+    let { user } = req.headers
 
-    //Caso este header não seja passado, retorne o status 404.
-    //Caso este participante não conste na lista de participantes, deve ser retornado um status 404
-    res.status(404)
+    if (!user) return res.sendStatus(404)
+
+    let nameExist = await db.collection("participants").findOne({ name: user })
+
+    if (!nameExist) return res.sendStatus(404)
 
     //Atualizar o atributo lastStatus do participante informado para o timestamp atual, utilizando Date.now().
-
+    await db.collection("participants").updateOne(
+        { name: user }, 
+        { $set: { name: user, lastStatus: Date.now() }}
+        )
     //caso sucesso status 200
-    res.status(200)
+    res.status(200).send("Participante atualizado")
 })
 
 //Ligar a aplicação do servidor para ouvir requisições

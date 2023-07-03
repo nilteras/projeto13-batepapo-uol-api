@@ -1,6 +1,6 @@
 import express from "express"
 import cors from "cors"
-import { MongoClient } from "mongodb"
+import { MongoClient, ObjectId } from "mongodb"
 import dotenv from "dotenv"
 import Joi from "joi"
 import dayjs from "dayjs"
@@ -170,6 +170,27 @@ setInterval(async () => {
     })
 
 }, 15000)
+
+app.delete("/messages/:id", async (req, res) => {
+    const { id } = req.params
+    const { user } = req.headers
+
+    if (!user) return res.sendStatus(404)
+
+    let nameExist = await db.collection("participants").findOne({ name: user })
+    if (!nameExist) return res.sendStatus(404)
+
+    const messageId = await db.collection("messages").findOne({ _id: new ObjectId(id) })
+    if (!messageId) return res.sendStatus(404)
+
+    if (messageId && (user === messageId.from)) {
+        await db.collection("messages").deleteOne({ _id: new ObjectId(id) })
+        res.status(204).send("Mensagem deletada!")
+    } else {
+        res.sendStatus(401)
+    }
+
+})
 
 
 //Ligar a aplicação do servidor para ouvir requisições

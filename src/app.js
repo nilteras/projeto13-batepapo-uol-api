@@ -153,23 +153,23 @@ app.post("/status", async (req, res) => {
     res.status(200).send("Participante atualizado")
 })
 
-setInterval(async () => {
-    let participants = await db.collection("participants").find({ lastStatus: { $lte: Date.now() - 10000 } }).toArray()
+ setInterval(async () => {
+     let participants = await db.collection("participants").find({ lastStatus: { $lte: Date.now() - 10000 } }).toArray()
 
-    participants.forEach(async p => {
-        await db.collection("participants").deleteOne({ name: p.name })
+     participants.forEach(async p => {
+         await db.collection("participants").deleteOne({ name: p.name })
 
-        await db.collection("messages").insertOne(
-            {
-                from: p.name,
-                to: "Todos",
-                text: "sai da sala...",
-                type: "status",
-                time: date
-            })
-    })
+         await db.collection("messages").insertOne(
+             {
+                 from: p.name,
+                 to: "Todos",
+                 text: "sai da sala...",
+                 type: "status",
+                 time: date
+             })
+     })
 
-}, 15000)
+ }, 15000)
 
 app.delete("/messages/:id", async (req, res) => {
     const { id } = req.params
@@ -185,14 +185,55 @@ app.delete("/messages/:id", async (req, res) => {
 
     if (messageId && (user === messageId.from)) {
         await db.collection("messages").deleteOne({ _id: new ObjectId(id) })
-        res.status(204).send("Mensagem deletada!")
+        res.status(200).send("Mensagem deletada!")
     } else {
         res.sendStatus(401)
     }
 
 })
 
+app.put("/messages/:id", async (req, res) => {
 
-//Ligar a aplicação do servidor para ouvir requisições
-const PORT = 5000;
-app.listen(PORT, () => console.log(`Servidor iniciado na porta ${PORT}`))
+    const { to, text, type } = req.body
+    const { user } = req.headers
+    const { id } = req.params
+
+    const messageSchema = Joi.object({
+        from: Joi.string().required(),
+        to: Joi.string().required(),
+        text: Joi.string().required(),
+        type: Joi.string().valid('message', 'private_message').required()
+    })
+    const validation = messageSchema.validate({ to, text, type, from: user }, { abortEarly: false })
+    console.log(validation)
+
+    if (validation.error) {
+        const errors = validation.error.details.map((err) => {
+            return err.message
+        })
+        return res.status(422).send(errors)
+    }
+
+    let nameExist = await db.collection("participants").findOne({ name: user })
+    if (!nameExist) return res.sendStatus(404)
+
+    const messageId = await db.collection("messages").findOne({ _id: new ObjectId(id) })
+    if (!messageId) return res.sendStatus(404)
+
+    if (messageId && (user === messageId.from)) {
+        await db.collection("messages").updateOne(
+            { _id: new ObjectId(id) },
+            { $set: {to, text, type} }
+            )
+        res.status(200).send("Mensagem atualizada!")
+    } else {
+        res.sendStatus(401)
+    }
+
+
+ })
+
+
+    //Ligar a aplicação do servidor para ouvir requisições
+    const PORT = 5000;
+    app.listen(PORT, () => console.log(`Servidor iniciado na porta ${PORT}`))
